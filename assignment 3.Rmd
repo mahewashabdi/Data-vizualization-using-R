@@ -1,0 +1,437 @@
+---
+title: "Assignment 3 : Visualizing Election Data"
+author: '20230589'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(readxl)
+library(colorblindr)
+
+```
+## Introduction
+This report presents a study of the Irish election 2020 for the region Galway West and compares it with 2016 elections. It summarizes:  
+- The vote per party in each election.  
+- The change in votes per party from 2016-2020  
+- A comparison to the national average for party share of the vote  
+- The change in vote for the most significant candidates in both elections 
+
+
+```{r include=FALSE}
+## Data wrangling
+
+##Read data of year 2020 for Galway West and choosing Party, candidate ,FPV and count1 columns for the total no. of votes
+data1 <- read_xlsx('GalwayWest-2020.xlsx',range = cell_cols("B:E"), col_names = c("Party","Candidate","FPv%","count1"))
+data2020 <- data1[-1,] ## removing the extra row that has heading
+data2020
+ ## Read data of year 2016 for Galway
+data2 <- read.csv('2016-04-28_general-election-count-details-galway-west-csv_en.csv')
+## filtering the rows with count1 and selecting the candidate, total.votes and Party columns and concatenating the candidate name from first name and surname.
+## The FPV votes are considered which are obtained by filtering with the value where count = 1
+data_16 <- data2 %>% filter(Count.Number==1) %>% select("Candidate.surname","Candidate.First.Name","Total.Votes","Party" ) %>% mutate(Candidate = paste(Candidate.First.Name,Candidate.surname,sep=" "),count1=Total.Votes) %>% select(Party,Candidate,count1)
+
+## Correcting the party labels in 2016 wrt to 2020 voting dataset
+data_16$Party[which(data_16$Party=="Fine  Gael")] <- "Fine Gael"
+data_16$Party[which(data_16$Party=="Social Democratic Party")] <- "Social Democrats"
+data_16$Party[which(data_16$Party=="Fianna Fail")] <- "Fianna Fáil"
+data_16$Party[which(data_16$Party=="Ind")] <- "Independent"
+data_16$Party[which(data_16$Party=="Sinn Fein")] <- "Sinn Féin"
+data_16$Party[which(data_16$Party=="AAA")] <- "Solidarity–PBP"
+data_16
+```
+## 1) Calculation of vote per party in each election
+
+```{r include=FALSE}
+## Summarizing the 2020 and 2016 data by calculating the total sum of vote counts (FPV is considered) for each party
+vote_16 <- data_16 %>% group_by(Party) %>% summarise("2016" = sum(count1))
+vote_20 <- data2020 %>% group_by(Party) %>% summarise("2020" = sum(as.numeric(count1)))
+## For 2016 and 2020, FPV votes are combined for each party 
+vote_party <- full_join(vote_16,vote_20)
+```
+
+
+```{r include=FALSE}
+## Joining the datasets for both the years 2016 and 2020 for Galway west
+combined_result <- full_join(vote_16,vote_20)
+combined_result
+
+```
+## Plot vote per party in each election
+```{r message=FALSE, warning=FALSE, include=FALSE}
+## Changing the format of the tibble to use it for plot by using pivot_longer
+## Okabi and Ito's palette has been used in the plot
+ untidy_data <- combined_result %>%
+  pivot_longer(!Party, names_to = "Year", values_to = "count")
+untidy_data
+```
+
+```{r warning=FALSE}
+theme_set(theme_classic())
+plot1 <- ggplot(untidy_data, (aes(x= Party, y = count , fill=Year))) + 
+  geom_col(position="dodge", alpha=0.85) +
+  ylab("vote counts") +
+  labs(caption = "Fig.1: Vote counts per party for year 2016 and 2020")+
+  scale_y_continuous(limits = c(0, 16000),
+                     
+                     breaks = c( 2500,  5000,  7500, 10000, 12500,15000 )) +
+  ggtitle("Vote Counts per party")+
+  ## Colors are chosen from Okabi and Ito's paletter
+  scale_fill_manual(values = c("#cc79a7","#0072b2" ), name = NULL) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(size = 0.4, linetype = 'solid', colour = "white"),
+    panel.ontop = TRUE,
+    legend.position= c(0.8, 0.9), legend.direction="horizontal",
+    plot.title = element_text(face="bold",size=12),
+    plot.caption = element_text(hjust = 0))
+
+plot1
+```
+## CVD view of the plot 1
+```{r}
+cvd <- cvd_grid(plot1)
+cvd
+ggsave("cvd.png", plot = cvd)
+```
+
+
+## Design decisions
+
+- The labels of the parties are different in 2016 as compared to 2020 dataset. The labels are corrected like Ind -> Independent. Also party like AAA was de-registered and renamed to Solidarity-PBP in 2020, so AAA has been changed in the dataset of 2016.
+- The grid lines are colored white to make it easier to read the vertical line which is indicative of count of votes.
+-  The y axis title has been removed as the plot title is already provided to avoid redundancy.
+-  The bar plot with position as dodge has been used to compare the counts in 2016 and 2020.
+-  Colors from Okabi and Ito's palette has been used for CVD readers.
+
+## 2) The change in vote per party from 2016-2020 for Galway West
+
+```{r include=FALSE}
+combined_result[is.na(combined_result)] <- 0
+change <- combined_result %>% select("Party" ,"2016"  ,"2020" ) %>% mutate( diff = combined_result[[3]]-combined_result[[2]])
+# response has been created to show whether difference is positive or negative. This will allow us to map as an aesthetic to the values of the "response'. 
+change$response <- factor(ifelse(change$diff >= 0, "Positive", "Negative"), levels= c("Positive","Negative"))
+change
+
+```
+
+
+
+```{r}
+## Plot for the change in vote from 2016-2020 per party
+
+#Produce a plot which uses party as x-axis, diff_in_votes as y and fills by party for easily comparison
+
+## 2 colors have been defined to show the positive and negative change.
+
+color <- c("#7997FF","#F8766D")
+
+ggplot(change, aes(x = reorder(Party,diff), y = diff, fill= response)) +
+  geom_col(alpha=0.85, width =0.8) + coord_flip(clip = "on") +
+  labs(caption ="Fig.2 : Change in vote per party from 2016 to 2020")+
+  ggtitle("Change in vote per Party in Galway West")+
+  scale_y_continuous(
+    breaks = seq(-5e3, 5e3, by = 1e3),
+    labels = seq(-5e3, 5e3, by = 1e3),
+    name = "Difference in votes per party"
+  )+ scale_fill_manual(values=color) + 
+  theme(
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(),
+    axis.title.y = element_blank(),
+    plot.margin = margin(6, 6, 6, 6),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(
+      size = 0.2,
+      linetype = 'solid',
+      colour = "lightgrey"
+    ),
+    panel.ontop = TRUE,
+    legend.position = "none",
+    plot.caption = element_text(hjust = 0)
+    
+  ) +
+  #Add a horizontal line at the origin to differentiate between positive and negative values
+  geom_hline(yintercept = 0,
+             size = 0.1,
+             colour = "grey")
+
+
+```
+## Design Decisions
+
+- The Party names are shown on the y-axis to enhance the readability of the reader.
+- The title of the y - axis for the party is removed as it is already shown in the title that we are showing the change in vote per party.
+- The bar chart uses a subtle color to show the sensitive coding scheme.
+
+
+3) Comparison of Galway West to the national average for party share of the vote
+for 2016 and 2020
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+## Reading national average data for 2020
+data_2020 = read.csv("2020average - Sheet1.csv")
+## dropping column with NA value and renaming the columns with proper name
+# % vote 20 contains the percentage of vote share for year 2020
+data_upd_2020 <- data_2020 %>% subset(select = -c(X))
+ column_name = c("Party", "Candidates", "Votes", "%vote20" , "Change_in_votes","seats","change_in_seat","%change_seat" )
+colnames(data_upd_2020) <- column_name
+
+data_avg_2020 <- data_upd_2020 %>% select("Party","%vote20")
+
+## Correcting the party labels
+data_avg_2020$Party[which(data_avg_2020$Party == "AontÃº")] <- "Aontú"
+data_avg_2020$Party[which(data_avg_2020$Party == "Independents")] <- "Independent"
+data_avg_2020$Party[which(data_avg_2020$Party == "Fianna FÃ¡il")] <- "Fianna Fáil"
+data_avg_2020$Party[which(data_avg_2020$Party =="Independents 4 Change")] <- "Independent"
+data_avg_2020$Party[which(data_avg_2020$Party =="Sinn FÃ©in")] <- "Sinn Féin"
+data_avg_2020$Party[which(data_avg_2020$Party =="Solidarityâ\200“PBP (Solidarityâ\200“ People Before Profit Alliance)")] <- "Solidarity-PBP"
+data_avg_2020$Party[which(data_avg_2020$Party =="Renua Ireland")] <- "Renua"
+data_avg_2020$Party[which(data_avg_2020$Party =="People Before Profit")] <- "Solidarity-PBP"
+data_avg_2020$Party[which(data_avg_2020$Party =="Labour")] <- "Labour Party"
+data_avg_2020$Party[which(data_avg_2020$Party =="Solidarity")] <- "Solidarity-PBP"
+
+## The dataset is grouped by the Party and the total share per party is calculated
+data_avg_2020upd <- data_avg_2020 %>% group_by(Party) %>% summarise("National_avg20" =sum(`%vote20`))
+data_avg_2020upd
+```
+
+
+```{r include=FALSE}
+
+#Reading national average data for 2016
+data_2016 = read.csv("2016 average - Sheet1.csv")
+## Selecting the column name with Party and %vote and giving it proper name
+##% vote 16 contains the percentage of vote share for year 2016
+data_avg_2016 <- data_2016 %>% subset(select = c("X2016.election.result","X..vote"))
+ column_name = c("Party", "%vote16" )
+colnames(data_avg_2016) <- column_name
+data_avg_2016 
+
+## Correcting the party labels so that all the labels are same.
+
+data_avg_2016$Party[which(data_avg_2016$Party == "AontÃº")] <- "Aontú"
+data_avg_2016$Party[which(data_avg_2016$Party == "Independents")] <- "Independent"
+data_avg_2016$Party[which(data_avg_2016$Party == "Fianna FÃ¡il")] <- "Fianna Fáil"
+data_avg_2016$Party[which(data_avg_2016$Party =="Independents 4 Change")] <- "Independent"
+data_avg_2016$Party[which(data_avg_2016$Party =="Sinn FÃ©in")] <- "Sinn Féin"
+data_avg_2016$Party[which(data_avg_2016$Party =="AAAâ\200“PbP (Anti-Austerity Alliance â\200“ People before Profit Alliance)")] <-  "Solidarity-PBP"
+data_avg_2016$Party[which(data_avg_2016$Party =="Renua Ireland")] <- "Renua"
+data_avg_2016$Party[which(data_avg_2016$Party =="People Before Profit")] <-  "Solidarity-PBP"
+data_avg_2016$Party[which(data_avg_2016$Party =="Labour")] <- "Labour Party"
+data_avg_2016$Party[which(data_avg_2016$Party =="Anti-Austerity Alliance / Socialist Party")] <-  "Solidarity-PBP"
+##The dataset is grouped by the Party and the total share per party is calculated
+data_avg_2016upd <- data_avg_2016 %>% group_by(Party) %>% summarise("National_avg16" = sum(`%vote16`))
+data_avg_2016upd
+
+
+```
+```{r include=FALSE}
+## Dataset for 2016 for parties in Galway west
+## Percentage of vote is calculated using the count1 for each party and dividing by the total of count1.
+galway_west2016 <- data_16 %>% select(c(Party,count1)) %>% group_by(Party) %>% summarise("vote_count"= sum(count1)) %>% mutate("Galwaywest_16" = round((vote_count/sum(vote_count))*100,2))
+galway_west2016 
+
+```
+```{r include=FALSE}
+## Dataset for 2020 for parties in Galway west.
+## Percentage of the vote is calculated from the count1 for the party by grouping them and column of %vote20 is added with that value of percentage
+galway_west2020 <- data2020 %>% select(c(Party, count1)) %>% group_by(Party) %>% summarise("totalVote" = sum(as.numeric(count1))) %>% mutate( "Galwaywest_20" = round((totalVote/sum(totalVote))*100,2))
+galway_west2020
+
+```
+```{r}
+## The national average data is filtered with the parties which are present in Galway west for 2020 and 2016
+
+## Combined_2016 contains the % vote share for national average and Galway West parties for 2016 and same way combined_2020 is calculated
+
+avg_2016 <- semi_join(data_avg_2016upd,galway_west2016)
+combined_2016 <- full_join(avg_2016,galway_west2016) %>% select("Party","Galwaywest_16","National_avg16") %>%
+  pivot_longer(cols= c("Galwaywest_16","National_avg16"),names_to = "Share",values_to="vote_share")
+combined_2016
+```
+```{r include=FALSE}
+avg_2020 <- semi_join(data_avg_2020upd,galway_west2020)
+combined_2020 <- full_join(avg_2020,galway_west2020) %>% select("Party","Galwaywest_20","National_avg20") %>%
+  pivot_longer(cols= c("Galwaywest_20","National_avg20"),names_to = "Share",values_to="vote_share")
+combined_2020
+```
+
+## Plot for comparison of Galway West to the national average for party share of the vote in 2016
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+theme_set(theme_classic())
+ggplot(combined_2016, (aes( x = Party, y = vote_share , fill=Share))) + 
+  geom_col(position="dodge", alpha=0.85) + coord_flip(clip = "on")+  geom_text(aes(label=vote_share),size=3,position=position_dodge(0.9),vjust = 0.5,hjust = 0)+
+  
+  ylab("Share of vote") +
+  labs(caption = "Fig.3: Galway West and National average % share of vote for Party in 2016 ")+
+  scale_y_continuous(limits = c(0, 60),
+                     breaks = c( 0, 20, 40, 60 )) +
+    
+  ggtitle("Galway West and National average % share of vote for Party in 2016")+
+  theme(
+    axis.title.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(size = 0.4, linetype = 'solid', colour = "white"),
+    panel.ontop = TRUE,
+    legend.position= c(0.8, 0.9), legend.direction="vertical",
+    plot.title = element_text(face="bold",size=12, hjust = 0),
+    plot.caption = element_text(hjust = 0))+
+   scale_fill_discrete(name = "Region", labels = c("Galway West", "National Average")) 
+```
+```{r}
+theme_set(theme_classic())
+ggplot(combined_2020, (aes( x = Party, y = vote_share , fill=Share))) + 
+  geom_col(position="dodge", alpha=0.85) + coord_flip(clip = "on")+  geom_text(aes(label=vote_share),size=3,position=position_dodge(0.9),vjust = 0.5,hjust = 0)+ 
+  labs(fill = "Region")+ ylab("Share of vote") +
+  labs(caption = "Fig.4: Galway West and National average % share of vote for Party in 2020 ")+
+  scale_y_continuous(limits = c(0, 60),
+                     breaks = c( 0, 20, 40, 60)) +
+    scale_fill_discrete(name = "Region", labels = c("Galway West", "National Average"))+
+
+  ggtitle("Galway West and National average % share of vote for Party in 2020")+
+  theme(
+    axis.title.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(size = 0.4, linetype = 'solid', colour = "white"),
+    panel.ontop = TRUE,
+    legend.position= c(0.8, 0.9), legend.direction="vertical",
+    plot.title = element_text(face="bold",size=12,hjust = 0),
+    plot.caption = element_text(hjust = 0))+
+  scale_fill_discrete(name = "Region", labels = c("Galway West", "National Average")) 
+```
+## Design Decisions
+
+• The % share of vote has been considered to show comparison since the count of the Galway west will always be lower as compared to national average count so the percentage of the total votes has been taken into account.
+• The names of the Party are reflected on the y-axis to enhance readability for the reader.
+• The % vote share has been shown on the right side of the bar to enhance readability.
+• To reduce redundancy, x-axis title has been removed since the labels for the % vote has been provided on the bar itself.
+•	The few of the party names are combined under one name such as “Independent 4 change” and “Independents” are considered as “Independent”.
+
+
+4) Change in vote for the most significant candidates in both elections in Galway West
+
+The most significant candidates will be the one which participated in both the elections of 2016 and 2020. The most significant candidates are selected from each party based on the one which performed best in the 2020 elections.
+```{r include=FALSE}
+data2020
+```
+
+
+```{r include=FALSE}
+data_16
+## candidate's names are changed to match the spelling so that comparison is possible with election of 2020.
+data_16$Candidate[which(data_16$Candidate == "Catherine Martina Ann Connolly")] <- "Catherine Connolly"
+data_16$Candidate[which(data_16$Candidate == "Sean Kyne")] <- "Seán Kyne"
+data_16$Candidate[which(data_16$Candidate == "Niall O' Tuathail")] <- "Niall Ó Tuathail"
+data_16$Candidate[which(data_16$Candidate == "Ã‰amon O'CuÃ­v")] <- "Éamon Ó Cuív"
+```
+```{r include=FALSE}
+## Most significant condidates are the one that participated in both the elections
+## Returns the names of the candidate that participated in both the elections 2016 and 2020
+significant <- inner_join(data_16,data2020%>%select(-c("FPv%")), by = "Candidate", suffix=c("2016","2020"))
+significant$count12020 <- as.numeric(significant$count12020) 
+
+## Most significant candidates are chosen per party as per their performance in 2020 elections.
+most_sig <- significant %>% group_by(Party2020) %>% filter(count12020 == max(count12020))
+
+## The dataset is changed to pivot longer format so that it can be used in the plot
+
+cleaned_most_sig <- most_sig %>% pivot_longer(c("count12016", "count12020"), names_to="Year", values_to="Total.Votes")
+
+## Renaming the values in dataframe from coun12016 ---> 2016 for the using it in the plot
+cleaned_most_sig$Year[cleaned_most_sig$Year=="count12020"] <- "2020"
+cleaned_most_sig$Year[cleaned_most_sig$Year=="count12016"] <- "2016"
+cleaned_most_sig
+
+
+```
+
+## Plot showing the change in votes of the most significant candidates for 2016 and 2020.
+```{r}
+ggplot(cleaned_most_sig , aes(x = Total.Votes, y= Candidate)) +
+        geom_line(aes(group = Candidate), colour = "grey", size=0.5) +
+        geom_point(aes(colour = Year), size = 3, alpha = 0.7) +
+  
+   ggtitle("Votes Comparison for the Most Significant candidates")+
+  labs(caption = "Fig.5: Comparison of votes for most significant candidates in 2016 and 2020 ")+
+  
+   scale_colour_manual(values= c("#ce5a6c","#212f85"), name = "") +
+  
+ scale_x_continuous(limits = c(2000, 12000),
+  expand = c(0, 0),
+ breaks = seq(2000,10000, by = 1000),
+   name = "Vote Counts") +
+
+
+  
+   theme(axis.title.y = element_blank(),
+    panel.grid.major.x =element_line(size=0.03),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.line.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.position= c(0.85, 0.94),
+    plot.caption = element_text(hjust = 0),
+    legend.text = element_text(size = 7), # legend text  was a little large
+    legend.key.size = unit(0.7, "lines"),
+    legend.title = element_blank())# legend keys were a little large)
+ 
+```
+
+
+
+##Design Decisions
+
+1)Some of the Candidate names are changed so that they have same spelling names.
+2)The candidates with the FPV are considered for the plot.
+3)The names of the candidates are reflected on the y-axis to enhance readability for the reader. 
+
+
+• The most significant candidates will be the one which participated in both the elections of 2016 and 2020.
+• The most significant candidates are selected from each party based on the one which performed best in the 2020 elections.
+• The names of the candidates appear on the y-axis to enhance readability for the reader.
+• The dots are used to compare the performance for year 2020 and 2016.
+
+## Conclusion
+•	The 3 major parties came out from the comparison of the results were Fine Gael, Fianna Fail and Sinn Fein
+•	The performances of Sinn Fein and Green party have improved whereas for Fine Gael and Fianna Fail have declined in year 2020 for Galway West.
+•	Sinn Fein performance is better nationally as compared to Galway West.
+•	Noel Grealish showed the best performance in the year 2016 and 2020 whereas Eamon O Cuiv performance declined in the election of 2020.
+
+# Appendix
+```{r eval=FALSE, echo=TRUE, ref.label=knitr::all_labels()}
+```
